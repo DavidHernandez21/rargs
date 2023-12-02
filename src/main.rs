@@ -172,7 +172,7 @@ impl Rargs {
         if let Some(pat_string) = opts.pattern.as_ref() {
             pattern = Regex::new(pat_string).unwrap();
         } else if let Some(delimiter) = opts.delimiter.as_ref() {
-            let pat_string = format!(r"(.*?){}|(.*?)$", delimiter);
+            let pat_string = format!(r"(.*?){delimiter}|(.*?)$");
             pattern = Regex::new(&pat_string).unwrap();
         } else {
             pattern = Regex::new(r"(.*?)[[:space:]]+|(.*?)$").unwrap();
@@ -249,28 +249,27 @@ struct RegexContext<'a> {
 impl<'a> RegexContext<'a> {
     fn builder(pattern: &'a Regex, content: &'a str) -> Self {
         let mut map = HashMap::new();
-        map.insert("".to_string(), Cow::Borrowed(content));
+        map.insert(String::new(), Cow::Borrowed(content));
         map.insert("0".to_string(), Cow::Borrowed(content));
 
         let group_names = pattern
             .capture_names()
-            .filter_map(|x| x)
+            .flatten()
             .collect::<Vec<&str>>();
 
         let mut groups = vec![];
 
         for caps in pattern.captures_iter(content) {
             // the numbered group
-            for mat_wrapper in caps.iter().skip(1) {
-                if let Some(mat) = mat_wrapper {
-                    groups.push(Cow::Borrowed(mat.as_str()));
-                }
+            for mat in caps.iter().skip(1).flatten() {
+                groups.push(Cow::Borrowed(mat.as_str()));
+                
             }
 
             // the named group
-            for name in group_names.iter() {
+            for name in &group_names {
                 if let Some(mat) = caps.name(name) {
-                    map.insert(name.to_string(), Cow::Borrowed(mat.as_str()));
+                    map.insert((*name).to_string(), Cow::Borrowed(mat.as_str()));
                 }
             }
         }
@@ -305,7 +304,7 @@ impl<'a> RegexContext<'a> {
 
 impl<'a> Context<'a> for RegexContext<'a> {
     fn get_by_name(&'a self, group_name: &str) -> Option<Cow<'a, str>> {
-        self.map.get(group_name).map(|c| c.clone())
+        self.map.get(group_name).cloned()
     }
 
     fn get_by_range(&'a self, range: &Range, sep: Option<&str>) -> Option<Cow<'a, str>> {
@@ -314,13 +313,12 @@ impl<'a> Context<'a> for RegexContext<'a> {
                 let num = self.translate_neg_index(num);
 
                 if num == 0 {
-                    return self.map.get("").map(|c| c.clone());
+                    return self.map.get("").cloned();
                 } else if num > self.groups.len() {
                     return None;
                 }
 
-                let x = Some(self.groups[num - 1].clone());
-                return x;
+                Some(self.groups[num - 1].clone())
             }
 
             Both(left, right) => {
@@ -378,7 +376,7 @@ enum Range {
     Inf(),
 }
 
-use Range::*;
+use Range::{Both, Inf, LeftInf, RightInf, Single};
 
 #[derive(Debug)]
 enum ArgFragment {
@@ -387,7 +385,7 @@ enum ArgFragment {
     RangeGroup(Range, Option<String>),
 }
 
-use ArgFragment::*;
+use ArgFragment::{Literal, NamedGroup, RangeGroup};
 
 impl ArgFragment {
     fn parse(field_string: &str) -> Self {
@@ -427,12 +425,13 @@ impl ArgFragment {
                 return RangeGroup(LeftInf(opt_right.unwrap()), opt_sep);
             } else if opt_right.is_none() {
                 return RangeGroup(RightInf(opt_left.unwrap()), opt_sep);
-            } else {
-                return RangeGroup(Both(opt_left.unwrap(), opt_right.unwrap()), opt_sep);
-            }
+            } 
+            
+            return RangeGroup(Both(opt_left.unwrap(), opt_right.unwrap()), opt_sep);
+            
         }
 
-        return Literal(field_string.to_string());
+        Literal(field_string.to_string())
     }
 }
 
@@ -451,7 +450,7 @@ impl<'a> From<&'a str> for ArgTemplate {
         for mat in CMD_REGEX.find_iter(arg) {
             fragments.push(Literal(arg[last..mat.start()].to_string()));
             fragments.push(ArgFragment::parse(mat.as_str()));
-            last = mat.end()
+            last = mat.end();
         }
         fragments.push(ArgFragment::Literal(arg[last..].to_string()));
 
