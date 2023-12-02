@@ -25,7 +25,7 @@ put it in your `PATH` after uncompress.
 ### Using Cargo
 
 ```
-cargo install --git https://github.com/lotabout/rargs.git
+cargo install --git https://github.com/DavidHernandez21/rargs.git
 ```
 
 ## Example usage
