@@ -2,6 +2,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::max;
+use std::convert::TryFrom;
 use std::collections::HashMap;
 use std::convert::From;
 use std::io::{self, BufRead};
@@ -296,7 +297,10 @@ impl<'a> RegexContext<'a> {
     }
 
     fn translate_neg_index(&self, idx: i32) -> usize {
-        let len = self.groups.len() as i32;
+        let len = match i32::try_from(self.groups.len()) {
+            Ok(l) => l,
+            Err(_) => i32::MAX, // Use i32::MAX as the default value
+        };
         let idx = if idx < 0 { idx + len + 1 } else { idx };
         max(0, idx) as usize
     }
@@ -326,11 +330,11 @@ impl<'a> Context<'a> for RegexContext<'a> {
                 let right = self.translate_neg_index(right);
 
                 if left == 0 {
-                    return self.get_by_range(&LeftInf(right as i32), sep);
+                    return self.get_by_range(&LeftInf(i32::try_from(right).unwrap()), sep);
                 } else if right > self.groups.len() {
-                    return self.get_by_range(&RightInf(left as i32), sep);
+                    return self.get_by_range(&RightInf(i32::try_from(left).unwrap()), sep);
                 } else if left == right {
-                    return self.get_by_range(&Single(left as i32), sep);
+                    return self.get_by_range(&Single(i32::try_from(left).unwrap()), sep);
                 }
 
                 Some(Cow::Owned(
